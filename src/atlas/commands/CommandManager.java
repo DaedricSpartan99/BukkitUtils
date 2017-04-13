@@ -51,10 +51,10 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 		
 			CommandCallback ann = method.getAnnotation(CommandCallback.class);
 			
-			if (ann == null) {
-				Messages.console("No annotation present, skipping it");
+			if (ann == null)
 				continue;
-			}
+			
+			Messages.console("CommandCallback found: " + ann.command());
 			
 			if (!method.getReturnType().getName().equals("boolean"))
 				throw new IllegalArgumentException("A function " +
