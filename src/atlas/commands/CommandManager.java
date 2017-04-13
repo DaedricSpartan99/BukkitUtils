@@ -26,7 +26,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 	
 	private String permissionDenied = "\u00a7cYou don't have permissions to perform this command",
 					notAPlayer = "\u00a7cOnly a player can perform this command",
-					notFound = "\u00a7Command not found";
+					notFound = "\u00a7cCommand not found";
 	
 	public void setPermissionDeniedMessage(String msg) {
 		
@@ -46,14 +46,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 	public void registerGroup(CommandGroup group, JavaPlugin plugin) throws IllegalArgumentException {
 		
 		Map<String, CommandWrapper> groupMap = new HashMap<String, CommandWrapper>();
-		cmdMap.put(group.getCommand(), new SimpleEntry<CommandGroup, Map<String, CommandWrapper>>(group, groupMap));
 		
-		for (Method method : group.getClass().getMethods()) {
+		for (Method method : group.getClass().getDeclaredMethods()) {
 		
 			CommandCallback ann = method.getAnnotation(CommandCallback.class);
 			
-			if (ann == null)
+			if (ann == null) {
+				Messages.console("No annotation present, skipping it");
 				continue;
+			}
 			
 			if (!method.getReturnType().getName().equals("boolean"))
 				throw new IllegalArgumentException("A function " +
@@ -83,9 +84,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 							" have two parameters: (CommandSender sender, String[] args)" +
 							" and should have boolean as return type");
 				
-				String args = params[0].getName();
+				String args = params[1].getName();
 				
-				if (!args.equals("String[]"))
+				if (!args.equals(String[].class.getName()))
 					throw new IllegalArgumentException("A function " +
 							" signed by CommandCallback must " +
 							" have two parameters: (CommandSender sender, String[] args)" +
@@ -93,7 +94,10 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 			}
 			
 			groupMap.put(ann.command(), new CommandWrapper(ann, access, method));
+			Messages.console("Command " + ann.command() + " registered correctly");
 		}
+		
+		cmdMap.put(group.getCommand(), new SimpleEntry<CommandGroup, Map<String, CommandWrapper>>(group, groupMap));
 		
 		plugin.getCommand(group.getCommand()).setExecutor(this);
 		plugin.getCommand(group.getCommand()).setTabCompleter(this);
@@ -114,20 +118,23 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 		
 		if (!groupEntry.getValue().containsKey(subcommand)) {
 			
-			boolean found = false;
+			if (args.length > 1)
+				return null;
+			
+			List<String> possibilities = new ArrayList<String>();
 			
 			for (Entry<String, CommandWrapper> entry : groupEntry.getValue().entrySet()) {
+				
+				if (entry.getKey().startsWith(args[0]))
+					possibilities.add(entry.getKey());
+				
 				for (String al : entry.getValue().getCallback().aliases()) {
-					if (args[0].equalsIgnoreCase(al)) {
-						subcommand = entry.getKey();
-						found = true;
-						break;
-					}
+					if (al.startsWith(args[0]))
+						possibilities.add(al);
 				}
 			}
 			
-			if (!found)
-				return null;
+			return possibilities;
 		}
 		
 		String[] subargs = Arrays.copyOfRange(args, 1, args.length);

@@ -49,10 +49,10 @@ public class Messages {
 			messages.clear();
 		
 		if (config.getConfig().isString("prefix"))
-			PREFIX = config.getConfig().getString("prefix");
+			PREFIX = Config.staticReadFormat(config.getConfig().getString("prefix"));
 		else {
 			config.getConfig().createSection("prefix");
-			config.getConfig().set("prefix", PREFIX);
+			config.getConfig().set("prefix", Config.staticWriteFormat(PREFIX));
 			mod = true;
 		}
 		
