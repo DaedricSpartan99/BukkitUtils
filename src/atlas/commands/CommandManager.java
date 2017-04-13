@@ -17,7 +17,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import atlas.messages.Message;
+import atlas.messages.Messages;
 
 public class CommandManager implements CommandExecutor, TabCompleter {
 	
@@ -177,7 +177,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 			}
 			
 			if (!found) {
-				Message.dynamicMessage(sender, notFound);
+				Messages.dynamicMessage(sender, notFound);
 				return false;
 			}
 			
@@ -188,7 +188,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 		
 		for (String permission : wrapper.getCallback().permissions()) {
 			if (!sender.hasPermission(permission)) {
-				Message.dynamicMessage(sender, permissionDenied);
+				Messages.dynamicMessage(sender, permissionDenied);
 				return true;
 			}
 		}
@@ -205,7 +205,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 		case PLAYER:
 			
 			if (!(sender instanceof Player)) {
-				Message.dynamicMessage(sender, notAPlayer);
+				Messages.dynamicMessage(sender, notAPlayer);
 				return true;
 			}
 			
@@ -255,7 +255,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 					call = (Boolean)_call;
 				
 			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-				Message.console("Cannot invoke command function");
+				Messages.console("Cannot invoke command function");
 				e.printStackTrace();
 			}
 			
