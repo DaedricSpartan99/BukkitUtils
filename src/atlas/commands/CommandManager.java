@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.AbstractMap.SimpleEntry;
+import java.util.Set;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -21,8 +21,8 @@ import atlas.messages.Messages;
 
 public class CommandManager implements CommandExecutor, TabCompleter {
 	
-	private Map<String, Entry<CommandGroup, Map<String, CommandWrapper>>> cmdMap = 
-			new HashMap<String, Entry<CommandGroup, Map<String, CommandWrapper>>>();
+	private Map<String, GroupWrapper> cmdMap = 
+			new HashMap<String, GroupWrapper>();
 	
 	private String permissionDenied = "\u00a7cYou don't have permissions to perform this command",
 					notAPlayer = "\u00a7cOnly a player can perform this command",
@@ -45,16 +45,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 	
 	public void registerGroup(CommandGroup group, JavaPlugin plugin) throws IllegalArgumentException {
 		
-		Map<String, CommandWrapper> groupMap = new HashMap<String, CommandWrapper>();
+		GroupWrapper gWrap = new GroupWrapper(group);
 		
 		for (Method method : group.getClass().getDeclaredMethods()) {
 		
+			MainCommand mainAnn = method.getAnnotation(MainCommand.class);
 			CommandCallback ann = method.getAnnotation(CommandCallback.class);
 			
-			if (ann == null)
+			if (ann == null && mainAnn == null)
 				continue;
-			
-			Messages.console("CommandCallback found: " + ann.command());
 			
 			if (!method.getReturnType().getName().equals("boolean"))
 				throw new IllegalArgumentException("A function " +
@@ -93,11 +92,16 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 							" and should have boolean as return type");
 			}
 			
-			groupMap.put(ann.command(), new CommandWrapper(ann, access, method));
-			Messages.console("Command " + ann.command() + " registered correctly");
+			if (mainAnn != null) {
+				gWrap.setMainCommand(method, access);
+				Messages.console("Command " + group.getCommand() + " registered correctly");
+			} else if (ann != null) {
+				gWrap.addSubcommand(ann.command(), new CommandWrapper(ann, access, method));
+				Messages.console("Subcommand " + ann.command() + " registered correctly");
+			}
 		}
 		
-		cmdMap.put(group.getCommand(), new SimpleEntry<CommandGroup, Map<String, CommandWrapper>>(group, groupMap));
+		cmdMap.put(group.getCommand(), gWrap);
 		
 		plugin.getCommand(group.getCommand()).setExecutor(this);
 		plugin.getCommand(group.getCommand()).setTabCompleter(this);
@@ -106,30 +110,30 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 	@Override
 	public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
 		
-		Entry<CommandGroup, Map<String, CommandWrapper>> groupEntry = cmdMap.get(cmd.getName());
+		GroupWrapper gWrap = cmdMap.get(cmd.getName());
 		
-		if (groupEntry == null)
+		if (gWrap == null)
 			throw new NullPointerException("Command " + cmd.getName() + " not registered correctly");
 		
 		if (args.length == 0)
-			return new ArrayList<String>(groupEntry.getValue().keySet());
+			return new ArrayList<String>(gWrap.getSubcommandNames());
 		
 		String subcommand = args[0];
 		
-		if (!groupEntry.getValue().containsKey(subcommand)) {
+		if (!gWrap.contains(subcommand)) {
 			
 			if (args.length > 1)
 				return null;
 			
 			List<String> possibilities = new ArrayList<String>();
 			
-			for (Entry<String, CommandWrapper> entry : groupEntry.getValue().entrySet()) {
+			for (Entry<String, CommandWrapper> entry : gWrap.getSubcommands()) {
 				
-				if (entry.getKey().startsWith(args[0]))
+				if (entry.getKey().startsWith(subcommand))
 					possibilities.add(entry.getKey());
 				
 				for (String al : entry.getValue().getCallback().aliases()) {
-					if (al.startsWith(args[0]))
+					if (al.startsWith(subcommand))
 						possibilities.add(al);
 				}
 			}
@@ -139,11 +143,11 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 		
 		String[] subargs = Arrays.copyOfRange(args, 1, args.length);
 		
-		List<String> list = groupEntry.getKey().tabComplete(sender, subcommand, subargs);
+		List<String> list = gWrap.getGroup().tabComplete(sender, subcommand, subargs);
 		
 		if (list == null) {
 			
-			String[] subs = groupEntry.getValue().get(subcommand).getCallback().tab();
+			String[] subs = gWrap.getSubcommand(subcommand).getCallback().tab();
 			if (subs.length > 0)
 				list = Arrays.asList(subs);
 		}
@@ -154,22 +158,38 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 	@Override
 	public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 		
-		Entry<CommandGroup, Map<String, CommandWrapper>> groupEntry = cmdMap.get(cmd.getName());
+		GroupWrapper gWrap = cmdMap.get(cmd.getName());
 		
-		if (groupEntry == null)
+		if (gWrap == null)
 			throw new NullPointerException("Command " + cmd.getName() + " not registered correctly");
 		
-		if (args.length == 0)
-			return false;
+		if (args.length == 0) {
+			
+			boolean call = false;
+			
+			if (gWrap.hasMainCommand()) {
+				
+				call = true;
+				
+				if (!gWrap.hasMainAccessibility(sender))
+					Messages.dynamicMessage(sender, notAPlayer);
+				else if (!gWrap.hasMainPermissions(sender))
+					Messages.dynamicMessage(sender, permissionDenied);
+				else 
+					call = gWrap.invokeMain(sender, args);
+			}
+			
+			return call;
+		}
 		
 		String name = args[0];
-		CommandWrapper wrapper = groupEntry.getValue().get(name);
+		CommandWrapper wrapper = gWrap.getSubcommand(name);
 		
 		if (wrapper == null) {
 			
 			boolean found = false;
 			
-			for (Entry<String, CommandWrapper> entry : groupEntry.getValue().entrySet()) {
+			for (Entry<String, CommandWrapper> entry : gWrap.getSubcommands()) {
 				
 				for (String alias : entry.getValue().getCallback().aliases()) {
 					if (args[0].equalsIgnoreCase(alias)) {
@@ -184,47 +204,141 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 			}
 			
 			if (!found) {
-				Messages.dynamicMessage(sender, notFound);
-				return false;
+				
+				boolean call = false;
+				
+				if (gWrap.hasMainCommand()) {
+					
+					call = true;
+					
+					if (!gWrap.hasMainAccessibility(sender))
+						Messages.dynamicMessage(sender, notAPlayer);
+					else if (!gWrap.hasMainPermissions(sender))
+						Messages.dynamicMessage(sender, permissionDenied);
+					else 
+						call = gWrap.invokeMain(sender, args);
+					
+				} else
+					Messages.dynamicMessage(sender, notFound);
+				
+				return call;
 			}
 			
-			wrapper = groupEntry.getValue().get(name);
+			wrapper = gWrap.getSubcommand(name);
 		}
 		
 		String[] subargs = Arrays.copyOfRange(args, 1, args.length);
 		
-		for (String permission : wrapper.getCallback().permissions()) {
-			if (!sender.hasPermission(permission)) {
-				Messages.dynamicMessage(sender, permissionDenied);
-				return true;
-			}
-		}
+		boolean call = true;
 		
-		boolean call;
-		
-		switch (wrapper.getAccessibility()) {
-		
-		case CONSOLE:
-			
-			call = wrapper.invoke(groupEntry.getKey(), sender, subargs);
-			break;
-			
-		case PLAYER:
-			
-			if (!(sender instanceof Player)) {
-				Messages.dynamicMessage(sender, notAPlayer);
-				return true;
-			}
-			
-			call = wrapper.invoke(groupEntry.getKey(), sender, subargs);
-			break;
-			
-		default:
-			call = true;
-			break;
-		}
+		if (!wrapper.hasPermissions(sender))
+			Messages.dynamicMessage(sender, permissionDenied);
+		else if (!wrapper.hasAccessibility(sender))
+			Messages.dynamicMessage(sender, notAPlayer);
+		else 
+			call = wrapper.invoke(gWrap.getGroup(), sender, subargs);
 		
 		return call;
+	}
+	
+	private class GroupWrapper {
+		
+		private CommandGroup group;
+		private MainCommand mainCallback = null;
+		private Method mainCommand = null;
+		private CommandAccessibility mainAccessibility = null;
+		private Map<String, CommandWrapper> subMap = new HashMap<String, CommandWrapper>();
+		
+		public GroupWrapper(CommandGroup group) {
+			
+			this.group = group;
+		}
+		
+		public void setMainCommand(Method mainCommand, CommandAccessibility access) {
+			
+			this.mainCallback = mainCommand.getAnnotation(MainCommand.class);
+			this.mainCommand = mainCommand;
+			this.mainAccessibility = access;
+		}
+		
+		public boolean hasMainCommand() {
+			
+			return mainCallback != null;
+		}
+		
+		public boolean hasMainAccessibility(CommandSender sender) {
+			
+			switch (mainAccessibility) {
+			
+			case CONSOLE:
+				break;
+				
+			case PLAYER:
+				
+				if (!(sender instanceof Player))
+					return false;
+			}
+			
+			return true;
+		}
+		
+		public boolean hasMainPermissions(CommandSender sender) {
+			
+			for (String permission : mainCallback.permissions()) {
+				if (sender.hasPermission(permission))
+					return true;
+			}
+			
+			return false;
+		}
+		
+		public boolean invokeMain(CommandSender sender, String[] args) {
+			
+			boolean call = true;
+			
+			try {
+				
+				Object _call = mainCommand.invoke(group, sender, args);
+				
+				if (_call instanceof Boolean)
+					call = (Boolean)_call;
+				
+			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+				e.printStackTrace();
+			}
+			
+			return call;
+		}
+		
+		public void addSubcommand(String name, CommandWrapper wrapper) {
+			
+			subMap.put(name, wrapper);
+		}
+		
+		public CommandWrapper getSubcommand(String name) {
+			
+			return subMap.get(name);
+		}
+		
+		public Set<Entry<String, CommandWrapper>> getSubcommands() {
+			
+			return subMap.entrySet();
+		}
+		
+		public Set<String> getSubcommandNames() {
+			
+			return subMap.keySet();
+		}
+		
+		public boolean contains(String name) {
+			
+			return subMap.containsKey(name);
+		}
+		
+		public CommandGroup getGroup() {
+			
+			return group;
+		}
 	}
 
 	private class CommandWrapper {
@@ -245,9 +359,30 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 			return callback;
 		}
 		
-		public CommandAccessibility getAccessibility() {
+		public boolean hasPermissions(CommandSender sender) {
 			
-			return access;
+			for (String permission : callback.permissions()) {
+				if (sender.hasPermission(permission))
+					return true;
+			}
+			
+			return false;
+		}
+		
+		public boolean hasAccessibility(CommandSender sender) {
+			
+			switch (access) {
+			
+			case CONSOLE:
+				break;
+				
+			case PLAYER:
+				
+				if (!(sender instanceof Player))
+					return false;
+			}
+			
+			return true;
 		}
 		
 		public boolean invoke(CommandGroup group, CommandSender sender, String[] args) {
