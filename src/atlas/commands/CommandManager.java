@@ -175,8 +175,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 					Messages.dynamicMessage(sender, notAPlayer);
 				else if (!gWrap.hasMainPermissions(sender))
 					Messages.dynamicMessage(sender, permissionDenied);
-				else 
-					call = gWrap.invokeMain(sender, args);
+				else {
+					
+					try {
+						call = gWrap.invokeMain(sender, args);
+					} catch (CommandExecutionException e) {
+						e.printStackTrace();
+						return true;
+					}
+				}
 			}
 			
 			return call;
@@ -215,8 +222,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 						Messages.dynamicMessage(sender, notAPlayer);
 					else if (!gWrap.hasMainPermissions(sender))
 						Messages.dynamicMessage(sender, permissionDenied);
-					else 
-						call = gWrap.invokeMain(sender, args);
+					else {
+						
+						try {
+							call = gWrap.invokeMain(sender, args);
+						} catch (CommandExecutionException e) {
+							e.printStackTrace();
+							return true;
+						}
+					}
 					
 				} else
 					Messages.dynamicMessage(sender, notFound);
@@ -235,8 +249,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 			Messages.dynamicMessage(sender, permissionDenied);
 		else if (!wrapper.hasAccessibility(sender))
 			Messages.dynamicMessage(sender, notAPlayer);
-		else 
-			call = wrapper.invoke(gWrap.getGroup(), sender, subargs);
+		else  {
+			
+			try {
+				call = wrapper.invoke(gWrap.getGroup(), sender, subargs);
+			} catch (CommandExecutionException e) {
+				e.printStackTrace();
+				return true;
+			}
+		}
 		
 		return call;
 	}
@@ -292,19 +313,29 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 			return false;
 		}
 		
-		public boolean invokeMain(CommandSender sender, String[] args) {
+		public boolean invokeMain(CommandSender sender, String[] args) throws CommandExecutionException {
 			
 			boolean call = true;
 			
+			
 			try {
-				
+					
 				Object _call = mainCommand.invoke(group, sender, args);
 				
 				if (_call instanceof Boolean)
 					call = (Boolean)_call;
-				
-			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-				e.printStackTrace();
+					
+			} catch (IllegalAccessException ex) {
+					
+				ex.printStackTrace();
+					
+			} catch (InvocationTargetException ex) {
+					
+				ex.printStackTrace();
+					
+			} catch (Exception ex) {
+					
+				throw new CommandExecutionException(ex);
 			}
 			
 			return call;
@@ -385,7 +416,8 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 			return true;
 		}
 		
-		public boolean invoke(CommandGroup group, CommandSender sender, String[] args) {
+		public boolean invoke(CommandGroup group, CommandSender sender, String[] args) 
+				throws CommandExecutionException {
 			
 			boolean call = true;
 			
@@ -396,9 +428,17 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 				if (_call instanceof Boolean)
 					call = (Boolean)_call;
 				
-			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-				Messages.console("Cannot invoke command function");
-				e.printStackTrace();
+			} catch (IllegalAccessException ex) {
+				
+				ex.printStackTrace();
+				
+			} catch (InvocationTargetException ex) {
+				
+				ex.printStackTrace();
+				
+			} catch (Exception ex) {
+				
+				throw new CommandExecutionException(ex);
 			}
 			
 			return call;
