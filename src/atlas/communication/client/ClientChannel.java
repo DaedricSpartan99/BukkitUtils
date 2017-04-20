@@ -31,17 +31,15 @@ public class ClientChannel implements Runnable {
 	
 	public ClientChannel(String serverIP, Plugin plugin) throws UnknownHostException {
 		
-		this(serverIP, InetAddress.getLocalHost(), ServerChannel.DEFAULT_SERVER_PORT, DEFAULT_LOCAL_PORT,
-				20L, plugin);
+		this(InetAddress.getByName(serverIP), InetAddress.getLocalHost(), plugin);
 	}
 	
 	public ClientChannel(String serverIP, String local, Plugin plugin) throws UnknownHostException {
 		
-		this(serverIP, InetAddress.getByName(local), ServerChannel.DEFAULT_SERVER_PORT, DEFAULT_LOCAL_PORT,
-				20L, plugin);
+		this(InetAddress.getByName(serverIP), InetAddress.getByName(local), plugin);
 	}
 	
-	public ClientChannel(String serverIP, InetAddress local, Plugin plugin) {
+	public ClientChannel(InetAddress serverIP, InetAddress local, Plugin plugin) {
 		
 		this(serverIP, local, ServerChannel.DEFAULT_SERVER_PORT, DEFAULT_LOCAL_PORT,
 				20L, plugin);
@@ -49,25 +47,24 @@ public class ClientChannel implements Runnable {
 	
 	public ClientChannel(String serverIP, String local, long checkTicks, Plugin plugin) throws UnknownHostException {
 		
-		this(serverIP, InetAddress.getByName(local), ServerChannel.DEFAULT_SERVER_PORT, DEFAULT_LOCAL_PORT,
-				checkTicks, plugin);
+		this(InetAddress.getByName(serverIP), InetAddress.getByName(local), checkTicks, plugin);
 	}
 	
-	public ClientChannel(String serverIP, InetAddress local, long checkTicks, Plugin plugin) {
+	public ClientChannel(InetAddress serverIP, InetAddress local, long checkTicks, Plugin plugin) {
 		
 		this(serverIP, local, ServerChannel.DEFAULT_SERVER_PORT, DEFAULT_LOCAL_PORT,
 				checkTicks, plugin);
 	}
 	
 	@SuppressWarnings("deprecation")
-	public ClientChannel(String serverIP, InetAddress local, int serverport, 
+	public ClientChannel(InetAddress serverIP, InetAddress local, int serverport, 
 			int localPort, long checkTicks, Plugin plugin) {
 		
 		try {
 			
 			this.socket = new Socket(serverIP, serverport, local, localPort);
 			
-			this.serverIP = serverIP;
+			this.serverIP = serverIP.getHostName();
 			this.offset = 0;
 			this.inputStream = new DataInputStream(socket.getInputStream());
 			this.outputStream = new DataOutputStream(socket.getOutputStream());
